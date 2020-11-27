@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="dremio-jdbc-driver-4.9.0-202010170313000159-4a37757a">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/Downloads/dremio-jdbc-driver-4.9.0-202010170313000159-4a37757a.jar!/" />
+      <root url="file://$USER_HOME$/Downloads/dremio-jdbc-driver-4.9.0-202010170313000159-4a37757a" />
+      <root url="jar://$USER_HOME$/Downloads/org.slf4j.api-1.7.1-sources.jar.zip!/" />
+      <root url="jar://$USER_HOME$/Downloads/org.slf4j.api-1.7.1-sources.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+    <jarDirectory url="jar://$USER_HOME$/Downloads/org.slf4j.api-1.7.1-sources.jar.zip!/" recursive="false" />
+  </library>
+</component>
