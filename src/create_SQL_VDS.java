@@ -1,13 +1,9 @@
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.StringBufferInputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.HashMap;
 
-
-//createt/dropt nur PDS zu VDS OHNE types&columnnames setting
+//created&dropt nur PDS zu VDS OHNE types&columnnames setting
 
 public class create_SQL_VDS {
     public static void main(String args[]){
@@ -18,16 +14,23 @@ public class create_SQL_VDS {
         String pfadInPC = "/media/jonas/TOSHIBA EXT/Jonas/daten/PublicBIbenchmark";
         //testDaten: String pfadInPC = "/media/jonas/TOSHIBA EXT/Jonas/testDaten";
         String pfadNASDremio ="allData."; //+folderName +dateiName (Arade_1.csv.bz2")-->aus Datei ausgelesen
-        String zielDremio = "\"@dremio\"."; //ZielOrdnerDremio ->DateiName auto erstellt
 
-        String speicherPath = "/media/jonas/TOSHIBA EXT/Jonas/Skripte";
-        String speicherPath_create = speicherPath + "/all_VDS_OhneTypNames.txt"; //datei-Name
+        //für Dirk Server
+        String speicherFolderDropAll = "/media/jonas/TOSHIBA EXT/Jonas/SkripteDirkServer";
+        String speicherFolderCreatVDSOhneNameTypes="/media/jonas/TOSHIBA EXT/Jonas/SkripteDirkServer/all_VDS_OhneTypNames.txt";
+
+        //für local Server
+        //String speicherFolderDropAll="/media/jonas/TOSHIBA EXT/Jonas/Skripte/sqlQueries_bearbeitet_einzeln";
+        //String speicherFolderCreatVDSOhneNameTypes="/media/jonas/TOSHIBA EXT/Jonas/Skripte/sqlQueries_bearbeitet_einzeln/all_VDS_OhneTypNames.txt";
+
+        //String zielOrdnerDremio = "\"@dremio\""; //localHostServer, Hauptordner=Username ->DateiName auto erstellt
+        String zielOrdnerDremio = "\"@greim\""; //dirk Server
 
         //CREATE
-        String allConverts = sqlVDSLoop(pfadInPC, pfadNASDremio, zielDremio);
+        String allConverts = sqlVDSLoop(pfadInPC, pfadNASDremio, zielOrdnerDremio);
         //System.out.println(allConverts);
         try {
-            Files.write(Paths.get(speicherPath_create), allConverts.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
+            Files.write(Paths.get(speicherFolderCreatVDSOhneNameTypes), allConverts.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -35,7 +38,7 @@ public class create_SQL_VDS {
         //DROP
         String allDrop = dropVDSLoop(allConverts);
         //System.out.println(allDrop);
-        String speicherPath_drop = speicherPath + "/allDropVDS.txt"; //datei-Name
+        String speicherPath_drop = speicherFolderDropAll + "/allDropVDS.txt"; //datei-Name
         try {
             Files.write(Paths.get(speicherPath_drop), allDrop.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
         } catch (IOException e) {
@@ -48,7 +51,7 @@ public class create_SQL_VDS {
 
         String sqlCreationVDS="CREATE VDS ";
         //here dremioPfad: "@dremio".newName == newname dateiName ohne .csv.bz2
-        sqlCreationVDS += zielDremio;
+        sqlCreationVDS += zielDremio+".";
         sqlCreationVDS += absolutePfadInPC.substring(absolutePfadInPC.lastIndexOf("/")+1,absolutePfadInPC.length()-8);
         sqlCreationVDS +=" as SELECT * FROM ";
         //here: NAS.Folder."CSV-NAME"

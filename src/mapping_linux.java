@@ -7,10 +7,18 @@ import java.util.*;
 
 public class mapping_linux {
     public static void main(String args[]) throws FileNotFoundException {
-        String speicherOrdnerPath = "/media/jonas/TOSHIBA EXT/Jonas/Skripte/VDS_TypNameSetter_einzeln";
-        String benchmarkOrdnerPath="/media/jonas/TOSHIBA EXT/Jonas/public_bi_benchmark-master/benchmark";
-        String datenOrdnerPath ="/media/jonas/TOSHIBA EXT/Jonas/daten/PublicBIbenchmark";
+        String benchmarkOrdnerPath="/media/jonas/TOSHIBA EXT/Jonas/public_bi_benchmark-master/benchmark"; // wo table Dateien gespeichert
+        String datenOrdnerPath ="/media/jonas/TOSHIBA EXT/Jonas/daten/PublicBIbenchmark"; //wo DatenCSV gespeichert
         String nas = "allData"; //wie heißt der NAS Ordner in Dremio
+
+        //local für mich
+        //String speicherOrtForAll = "/media/jonas/TOSHIBA EXT/Jonas/Skripte";
+        //String zielOrdnerDremio = "\"@dremio\""; //localHostServer, Hauptordner=Username ->DateiName auto erstellt
+
+        //dirk Server
+        String speicherOrtForAll = "/media/jonas/TOSHIBA EXT/Jonas/SkripteDirkServer";
+        String zielOrdnerDremio = "\"@greim\""; //dirk Server (pathNamen immer in \"abc\" und pathNamen getrennt durch Punkte
+
         HashMap<String, String> typeConvertDremio = new HashMap<String, String>();
         HashMap<String, String> absolutePathDatenCSVMapping = new HashMap<String, String>();
         mapping(typeConvertDremio); //erstellt mapWerte
@@ -18,24 +26,9 @@ public class mapping_linux {
         //System.out.println(getAbsolutePathDaten(absolutePathDatenCSVMapping, "Arade_1.csv.bz2"));
 
         //Uwandlung aller Table im Ordner Benchmark
-        process2txtLoop(typeConvertDremio, benchmarkOrdnerPath, speicherOrdnerPath, absolutePathDatenCSVMapping, nas);
-
-        //System.out.print(createRAWReflections("/media/jonas/TOSHIBA EXT/Jonas/public_bi_benchmark-master/benchmark/Arade/tables/Arade_1.table.sql"));
-
-        /*String tablePath= "/media/jonas/TOSHIBA EXT/Jonas/public_bi_benchmark-master/benchmark/Arade/tables/Arade_1.table.sql";
-        try {
-            createReflections(typeConvertDremio,tablePath);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }*/
-        //Umwandlung für ein Table
-        /*String tablePath = "C:\\Users\\jonas\\OneDrive\\Dokumente\\Uni2\\7_Semester\\Bachelorarbeit\\public_bi_bench\\public_bi_benchmark-master (1)\\public_bi_benchmark-master\\benchmark\\Uberlandia\\tables\\Uberlandia_1.table.sql";
-        try {
-            toText(typeConvertDremio, tablePath, speicherOrdnerPath);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }*/
+        process2txtLoop(typeConvertDremio, benchmarkOrdnerPath, absolutePathDatenCSVMapping, nas, speicherOrtForAll, zielOrdnerDremio);
     }
+
     public static void mapping(HashMap<String, String> typeConvertDremio){
         //varchar = nix machen
         //varbinary = CONVERT(B, 'UTF8') as B
@@ -87,10 +80,11 @@ public class mapping_linux {
     public static String getDremio(HashMap<String, String> typeConvertDremio, String value){
         return typeConvertDremio.getOrDefault(value, " ERROR1:_TYP_NOT_MAPPED ");
     }
-    public static String toText(HashMap<String, String> typeConvertDremio, String tablePath, String speicherOrdnerPath, HashMap<String, String> absolutePathDatenCSVMapping, String nas) throws FileNotFoundException {
+    public static String toText(HashMap<String, String> typeConvertDremio, String tablePath, HashMap<String, String> absolutePathDatenCSVMapping, String nas, String speicherOrtForAll, String zielOrdnerDremio) throws FileNotFoundException {
         File text = new File(tablePath);
         Scanner scnr = new Scanner(text);
-        String result = "CREATE VDS \"@dremio\"."+tablePath.substring(tablePath.lastIndexOf('/')+1, (tablePath.length()-10))+" as SELECT";
+        //String result = "CREATE VDS \"@dremio\"."+tablePath.substring(tablePath.lastIndexOf('/')+1, (tablePath.length()-10))+" as SELECT";
+        String result = "CREATE VDS "+zielOrdnerDremio+"."+tablePath.substring(tablePath.lastIndexOf('/')+1, (tablePath.length()-10))+" as SELECT";
         //wenn ohne VDS Erstellung
         //String result = "SELECT";
         String booleanNull = "(SELECT *, ";
@@ -220,10 +214,12 @@ public class mapping_linux {
 
         //System.out.println(result);
         //Bsp. /Uberlandia_1.table_processed.sql
-        String newFilename = speicherOrdnerPath + tablePath.substring(tablePath.lastIndexOf('/'), (tablePath.length()-4)) + "_processed.sql"; //trennt .sql ab und hängt processed.sql an
+        String grundPath = speicherOrtForAll+"/VDS_TypNameSetter_einzeln";
+        File file = new File(grundPath);
+        boolean dirCreated = file.mkdir(); //created alle Ordner des Pathes die noch nicht exe.
+        String newFilename = grundPath + tablePath.substring(tablePath.lastIndexOf('/'), (tablePath.length()-4)) + "_processed.sql"; //trennt .sql ab und hängt processed.sql an
         //String path1 = "C:/Users/jonas/Downloads/test99.sql"; //feste Speicheradresse für neue Datei
         //System.out.println(newFilename);
-
 
         //Speichern als sql dateien
         try {
@@ -249,7 +245,7 @@ public class mapping_linux {
         ergebnis="\""+ergebnis+"\""; //in "" da AS & AT probleme als Befehle gelesen werden
         return ergebnis;
     }
-    public static void process2txtLoop(HashMap<String, String> typeConvertDremio, String pathBenchmarkFolder, String speicherOrdnerPath, HashMap<String, String> absolutePathDatenCSVMapping, String nas){
+    public static void process2txtLoop(HashMap<String, String> typeConvertDremio, String pathBenchmarkFolder, HashMap<String, String> absolutePathDatenCSVMapping, String nas, String speicherOrtForAll, String zielOrdnerDremio){
         File folder = new File(pathBenchmarkFolder);
         File[] listOfFiles = folder.listFiles();
         //createt den path zu jeder table.sql datei
@@ -265,9 +261,9 @@ public class mapping_linux {
                 if(file2.getName().endsWith("sql")) { //wenn schon mal txt dateien erstellt wurden(aussortiert)
                     String path3 = path2 + "/" + file2.getName();
                     try {
-                        allCommands+=toText(typeConvertDremio, path3, speicherOrdnerPath, absolutePathDatenCSVMapping, nas)+"\n";
-                        allCommandsAggReflection+=createReflections(typeConvertDremio,path3)+"\n";
-                        allCommandsRawReflection+=createRAWReflections(path3)+"\n";
+                        allCommands+=toText(typeConvertDremio, path3, absolutePathDatenCSVMapping, nas, speicherOrtForAll, zielOrdnerDremio)+"\n";
+                        allCommandsAggReflection+=createReflections(typeConvertDremio,path3, speicherOrtForAll, zielOrdnerDremio)+"\n";
+                        allCommandsRawReflection+=createRAWReflections(path3,speicherOrtForAll, zielOrdnerDremio)+"\n";
                     } catch (FileNotFoundException e) {
                         e.printStackTrace();
                     }
@@ -275,17 +271,17 @@ public class mapping_linux {
             }
         }
         try {
-            Files.write(Paths.get("/media/jonas/TOSHIBA EXT/Jonas/Skripte/allAggReflections.sql"), allCommandsAggReflection.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
+            Files.write(Paths.get(speicherOrtForAll+"/allAggReflections.sql"), allCommandsAggReflection.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
         } catch (IOException e) {
             e.printStackTrace();
         }
         try {
-            Files.write(Paths.get("/media/jonas/TOSHIBA EXT/Jonas/Skripte/all_VDS_SetterTypName.sql"), allCommands.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
+            Files.write(Paths.get(speicherOrtForAll+"/all_VDS_SetterTypName.sql"), allCommands.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
         } catch (IOException e) {
             e.printStackTrace();
         }
         try {
-            Files.write(Paths.get("/media/jonas/TOSHIBA EXT/Jonas/Skripte/allRawReflections.sql"), allCommandsRawReflection.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
+            Files.write(Paths.get(speicherOrtForAll+"/allRawReflections.sql"), allCommandsRawReflection.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -318,11 +314,11 @@ public class mapping_linux {
     public static String getAbsolutePathDaten(HashMap<String, String> absolutePathDatenMap, String value){
         return absolutePathDatenMap.getOrDefault(value, " ERROR1:_TYP_NOT_MAPPED ");
     }
-    public static String createReflections(HashMap<String, String> typeConvertDremio, String tablePath)throws FileNotFoundException{
+    public static String createReflections(HashMap<String, String> typeConvertDremio, String tablePath, String speicherOrtForAll, String zielOrdnerDremio)throws FileNotFoundException{
         File text = new File(tablePath);
         Scanner scnr = new Scanner(text);
         String tableFileName = tablePath.substring(tablePath.lastIndexOf('/')+1, (tablePath.length()-10));
-        String result = "ALTER DATASET \"@dremio\".\""+tableFileName+"\"";
+        String result = "ALTER DATASET "+zielOrdnerDremio+".\""+tableFileName+"\"";
         result += " CREATE AGGREGATE REFLECTION ";
         result += tableFileName+"_AGG"; //Reflection Name
         result += " USING";
@@ -399,7 +395,10 @@ public class mapping_linux {
         result=result.substring(0,(result.length()-1));
         result+=");";
 
-        String speicherOrt="/media/jonas/TOSHIBA EXT/Jonas/Skripte/AggReflections_einzeln";
+        //String speicherOrt="/media/jonas/TOSHIBA EXT/Jonas/Skripte/AggReflections_einzeln";
+        String speicherOrt = speicherOrtForAll+"/AggReflections_einzeln";
+        File file = new File(speicherOrt);
+        boolean dirCreated = file.mkdir(); //created alle Ordner des Pathes die noch nicht exe.
         speicherOrt+="/"+tableFileName+"_AGG.sql";
         try {
             Files.write(Paths.get(speicherOrt), result.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
@@ -408,12 +407,12 @@ public class mapping_linux {
         }
         return result;
     }
-    public static String createRAWReflections(String tablePath) throws FileNotFoundException {
+    public static String createRAWReflections(String tablePath, String speicherOrtForAll, String zielOrdnerDremio) throws FileNotFoundException {
         //RAW s über die vds created
         File text = new File(tablePath);
         Scanner scnr = new Scanner(text);
         String tableFileName = tablePath.substring(tablePath.lastIndexOf('/')+1, (tablePath.length()-10));
-        String result = "ALTER DATASET \"@dremio\".\""+tableFileName+"\"";
+        String result = "ALTER DATASET "+zielOrdnerDremio+".\""+tableFileName+"\"";
         result += " CREATE RAW REFLECTION ";
 
         result += tableFileName+"_RAW"; //Reflection Name
@@ -430,7 +429,10 @@ public class mapping_linux {
         result=result.substring(0,result.length()-1);
         result+=");";
 
-        String speicherOrt="/media/jonas/TOSHIBA EXT/Jonas/Skripte/RawReflections_einzeln";
+        //String speicherOrt="/media/jonas/TOSHIBA EXT/Jonas/Skripte/RawReflections_einzeln";
+        String speicherOrt = speicherOrtForAll+"/RawReflections_einzeln";
+        File file = new File(speicherOrt);
+        boolean dirCreated = file.mkdir(); //created alle Ordner des Pathes die noch nicht exe.
         speicherOrt+="/"+tableFileName+"_RAW.sql";
         try {
             Files.write(Paths.get(speicherOrt), result.getBytes()); //erstellt txt datei mit Namen wird durch letzten \ ende des Pathes gesetzt
