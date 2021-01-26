@@ -5,23 +5,71 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 
-public class mapping_linux {
+//Erstellt zu jeden Dataset eine SQL-Anfragen für:
+    //Aggregation-Reflection Erstellung
+    //RAW-Reflection Erstellung
+    //Virtuell Dataset Erstellung (mit denen die Spaltendatentypen&Spaltennamen der CSV daten gesetzt werden)
+
+
+//Diese Klasse erstellt die SQL-Anfragen mit denen die Spaltendatentypen und Spaltennamen der CSV-Dateien in Dremio gesetzt werden
+//+Erstellt SQL-Anfragen für die Reflection-Erstellung
+//Es wird mit der SQL-Anfrage ein VDS(Virtual Dataset) erstellt indem alle Typen&Namen in Dremio gesetzt werden
+//dadurch müsssen CSV Dateien nicht aufwendig in der UI manuell aufbereitet werden (manuell Typen und Namen setzten --> sehr Zeit intensiv)
+//Die CSV-Dateien können nicht unaufbereitet die Anfragen des Public bi Benchmarks ausführen
+//Obwohl die Public bi Benchmark Anfragen Casts und As ausführen -> viele Datentypen erkennt Dremio nicht, setzt sie falsch oder erkennt Nulls nicht
+//wenn die Typen&Namen richtig gesetzt sind  -> kann man die public bi Benchmark Anfragen ausführen
+//Die SQL-Anfragen des Public Benchmarks werden in der Klasse Aufbereitung_PublicBIBenchmark_Anfragen umgewandelt
+
+//Beispiele:
+//RAW-Erstellung-SQL:           ALTER DATASET "@dremio"."Arade_1" CREATE RAW REFLECTION Arade_1_RAW USING DISPLAY ("F1","F2","F3","F4","F5","F6","F7","F8","F9","Number of Records","WNET (bin)");
+//Aggregation-Erstellung-SQL:   ALTER DATASET "@dremio"."Arade_1" CREATE AGGREGATE REFLECTION Arade_1_AGG USING DIMENSIONS ("F1","F2","F3","F6","F7") MEASURES ("F4","F5","F8","F9","Number of Records","WNET (bin)");
+//CSV_Aufbereitung-SQL:         CREATE VDS "@dremio".Arade_1 as SELECT CAST("A1" AS VARCHAR) as "F1", CAST("B1" AS VARCHAR) as "F2", TO_TIMESTAMP((SUBSTR("C", 0, LENGTH("C") - 3)), 'YYYY-MM-DD HH24:MI:SS.FFF', 1) as "F3", CONVERT_TO_FLOAT("D", 1, 1, 0) as "F4", CONVERT_TO_FLOAT("E", 1, 1, 0) as "F5", CAST("F1" AS VARCHAR) as "F6", CAST("G1" AS VARCHAR) as "F7", CONVERT_TO_FLOAT("H", 1, 1, 0) as "F8", CONVERT_TO_FLOAT("I", 1, 1, 0) as "F9", CONVERT_TO_INTEGER("J", 1, 1, 0) as "Number of Records", CONVERT_TO_INTEGER("K", 1, 1, 0) as "WNET (bin)" FROM (SELECT *,  CASE WHEN "A" = 'null' THEN NULL ELSE "A" END AS "A1", CASE WHEN "B" = 'null' THEN NULL ELSE "B" END AS "B1", CASE WHEN "F" = 'null' THEN NULL ELSE "F" END AS "F1", CASE WHEN "G" = 'null' THEN NULL ELSE "G" END AS "G1" FROM allData.Arade."Arade_1.csv.bz2");
+
+
+//Genauere Funktionserklärung: (wird auf allen Table Dateien im Public Bi Benchmark durch iteriert)
+
+//Ausgangssituation:
+//Physical Datasets (PDS) liegen in NAS-Ordner in Dremio (ohne Spaltennamen und Spaltentyp)
+//in PDS ist defaultmäßig der Spaltentyp VARCHAR und die Spaltennamen sind nach dem Alphabet benannt (A,B,C,...)
+
+//Es wird eine Anfrage generiert die aus dem PDS eine Virtual Dataset (VDS) erstellt und auf diesen Virtual Datasets Anfragen anlagern, die auto. typen&Namen setzten
+
+//Table-Dateien werden aus Benchmark-Ordner ausgelesen --> dann wird jedes Wort der Table -Datei in einem Feld einens Array dargstellt (->auslesbar)
+//Spalten-Datentypen:
+//-> aus dem Array werden die Datentypen extrahiert
+//-> Datentypen werden in die Dremio konformen Datentypen umgewandelt
+//-> Je nach Dremio-Datentyp werden die passenden Casts in der Ergebniss-Anfrage eingefügt (dadruch dass default Spaltenbenennung nach ABC benennt -> wird die richtige Spalten ausgewählt)
+//(es exe. Ausnahmen in den Spalten mit dem Typ Varchar und Boolean werden durch die Cast keine NULL werte gesetzt-> deshalb wird die Spalte komplett durch iteriert(mit CASE) und alle nulls werden als NULL gesetzt (deshalb A1 da die Spalte kurzfristig umbenannt werden muss)
+//Spalten-Namen:
+//Spaltennamen werden ausgelesen
+//durch die regelmäßige default Spaltenbenennung werden in der Ergebnis-SQL-Anfrage die Spaltennamen richtig  mit AS gesetzt (da Spaltennamen Berechenbar sind)
+
+//RAW Reflection Erstellung
+//Spaltennamen aus Table-Datei ausgelesen
+//es wird eine SQL Anfrage erstellt, die eine RAW-Reflection von dem gewünschten Dataset erstellt in der alle Spalten aggriert werden
+
+//Aggregation Reflection Erstellung
+//Spaltennamen und Typ aus Table-Datei ausgelesen
+//je Nach Typ wird entweder eine Dimension oder ein Measure aggregiert
+//hier: alle INT, Float oder Double Spalten -> Measure aggregiert
+//      alle Anderen -> Dimension aggregiert
+
+
+
+public class Aufbereitung_Datasets_Reflections {
     public static void main(String args[]) throws FileNotFoundException {
-        String benchmarkOrdnerPath="/media/jonas/TOSHIBA EXT/Jonas/public_bi_benchmark-master/benchmark"; // wo table Dateien gespeichert
-        String datenOrdnerPath ="/media/jonas/TOSHIBA EXT/Jonas/daten/PublicBIbenchmark"; //wo DatenCSV gespeichert
-        String nas = "allData"; //wie heißt der NAS Ordner in Dremio
+        String benchmarkOrdnerPath="/media/jonas/TOSHIBA EXT/Jonas/public_bi_benchmark-master/benchmark"; // Public BI Benchmark Path
+        String datenOrdnerPath ="/media/jonas/TOSHIBA EXT/Jonas/daten/PublicBIbenchmark"; //Path des Ordner indem die CSV-Dateien sind
+        String nas = "allData"; //NAS Ordner in Dremio (NAS wurde genutzt um die CSV-Daten in das Single-Node-Cluster zu laden
+        //->Work-around da Dremio keine Multi-uploads ermöglicht und die UI ein upload Limit von 500MB hat
 
-        //local für mich
-        //String speicherOrtForAll = "/media/jonas/TOSHIBA EXT/Jonas/Skripte";
-        //String zielOrdnerDremio = "\"@dremio\""; //localHostServer, Hauptordner=Username ->DateiName auto erstellt
-
-        //dirk Server
-        String speicherOrtForAll = "/media/jonas/TOSHIBA EXT/Jonas/SkripteDirkServer";
-        String zielOrdnerDremio = "\"@greim\""; //dirk Server (pathNamen immer in \"abc\" und pathNamen getrennt durch Punkte
+        String speicherOrtForAll = "/media/jonas/TOSHIBA EXT/Jonas/Skripte"; //Speicherort für alle erstellten SQL-Anfragen
+        String zielOrdnerDremio = "\"@dremio\""; //localHostServer, Hauptordner=Username ->DateiName auto erstellt
+        //pathNamen immer so angeben \"abc\" und pathNamen in Dremio getrennt durch Punkte
 
         HashMap<String, String> typeConvertDremio = new HashMap<String, String>();
         HashMap<String, String> absolutePathDatenCSVMapping = new HashMap<String, String>();
-        mapping(typeConvertDremio); //erstellt mapWerte
+        mapping(typeConvertDremio); //erstellt Datentyp mapWerte für Dremio
         absolutePathDatenMapping(absolutePathDatenCSVMapping, datenOrdnerPath);
         //System.out.println(getAbsolutePathDaten(absolutePathDatenCSVMapping, "Arade_1.csv.bz2"));
 
@@ -29,13 +77,10 @@ public class mapping_linux {
         process2txtLoop(typeConvertDremio, benchmarkOrdnerPath, absolutePathDatenCSVMapping, nas, speicherOrtForAll, zielOrdnerDremio);
     }
 
+    //diese Methode erstellt ein Mapping wie Dremio die Datentypen intern mapped
+    //https://docs.dremio.com/sql-reference/data-types-mysql.html
     public static void mapping(HashMap<String, String> typeConvertDremio){
-        //varchar = nix machen
-        //varbinary = CONVERT(B, 'UTF8') as B
-        //boolean = Cast probieren(Convert geht nicht): Cast("Canal_ID" as boolean) as Canal_ID <-- aber wenn in spalte 1 wert=null --> Fehler
-        //Convert_to_Integer, _Float, _timestamp, _date, _time
-
-        typeConvertDremio.put("bit","boolean"); //-->zu Integer?
+        typeConvertDremio.put("bit","boolean");
         typeConvertDremio.put("boolean","boolean");
         typeConvertDremio.put("bigint","integer");
         typeConvertDremio.put("bigint unsigned","integer");
@@ -75,11 +120,14 @@ public class mapping_linux {
         typeConvertDremio.put("varbinary","varbinary");
         typeConvertDremio.put("varchar","varchar");
         typeConvertDremio.put("year","integer");
-        typeConvertDremio.put("year!","year!");//Ausnahme year in Reflecions= Dimension ist
+        typeConvertDremio.put("year!","year!");//Ausnahme year in Reflecions (=Dimension)
     }
+
     public static String getDremio(HashMap<String, String> typeConvertDremio, String value){
         return typeConvertDremio.getOrDefault(value, " ERROR1:_TYP_NOT_MAPPED ");
     }
+
+
     public static String toText(HashMap<String, String> typeConvertDremio, String tablePath, HashMap<String, String> absolutePathDatenCSVMapping, String nas, String speicherOrtForAll, String zielOrdnerDremio) throws FileNotFoundException {
         File text = new File(tablePath);
         Scanner scnr = new Scanner(text);
@@ -90,23 +138,22 @@ public class mapping_linux {
         String booleanNull = "(SELECT *, ";
         int i = 64;
         scnr.nextLine(); //überspringt die erste Zeile
-        while (scnr.hasNextLine()) { //schneidet aus jeder zeile column-name raus
+        while (scnr.hasNextLine()) { //schneidet aus jeder zeile Column-name raus
             String line = scnr.nextLine();
             //System.out.println(line);
             if (line.length() > 2) { //letzte zeile nicht lesen(ist nur klammer zu "};")
                 i++; //65==A
-                String lineCuttet = line.substring((line.lastIndexOf('"')+2),line.length()); //macht das Typ in Liste auf Platz 0 ist
-                //muss ab da abgeschnitten werden weil manche column names spaces enthalten
-                List<String> myList = new ArrayList<String>(Arrays.asList(lineCuttet.split(" ")));
+                String lineCuttet = line.substring((line.lastIndexOf('"')+2),line.length()); //setzt den Datentyp in Liste auf Platz 0
+                List<String> myList = new ArrayList<String>(Arrays.asList(lineCuttet.split(" "))); //wird abgeschnitten, da manche column names spaces enthalten
                 //SELECT (CAST("A" as bigint) as newColumn,
                 //SELECT CONVERT_TO_INTEGER("A", 1, 1, 0) AS "Agencia_ID"
                 String ohneKommaZumSchluss = myList.get(0).replace(",", "");//Zeile kann quasi: ("A" double,) <-
 
-                //String decimalCuttet=ohneKommaZumSchluss.substring(0, 7);//manchmal decimal(7 oder decimal(7),
+                //Ausnahme: in decimal kein leerzeichen -> mehrere Wörter in einen Feld = decimal(7 oder decimal(7),
                 if(ohneKommaZumSchluss.startsWith("decimal")){
                     ohneKommaZumSchluss = "decimal";
                 }
-                //abfangen long varbinary => 2 Wörter programm wertet nur erstes aus
+                //Ausnhame: long varbinary => Datentyp aus 2 Wörtern
                 //("long varbinary","varbinary"); ("long varchar","varchar");
                 if(ohneKommaZumSchluss.startsWith("long")){
                     if(myList.get(0).startsWith("varb")){
@@ -114,14 +161,17 @@ public class mapping_linux {
                         ohneKommaZumSchluss = "varchar";
                     }
                 }
+
+                //Ausnahme: nach Varchar wird öfter die max. Länge angeben
                 if(ohneKommaZumSchluss.startsWith("varchar")){
                     ohneKommaZumSchluss = "varchar";
                 }
 
-                //--muss jezz in dremio-typen und umgemappet werden
-                //erst nach if abfragen => varchar(1600), decimal(2, 3), long varbinary vorbereitet zum mapping(Klammern weg, ein Wort)
+                //Datentyp wird hier zu dremio-daten-typen umgemappet
                 ohneKommaZumSchluss = getDremio(typeConvertDremio, ohneKommaZumSchluss);
 
+                //je nach Dremio-Datentyp werden die Internen Casts-Befehle angewandt/eingefügt
+                //in Dokumentation exe. auch einfachere/einheitlichere Befehle -> funktionieren zum Teil nicht & erkennen keine NULLs (setzten es als String)
                 switch(ohneKommaZumSchluss){
                     case "timestamp": result+=" TO_TIMESTAMP((SUBSTR("+getDefaultColumnNames(i)+", 0, LENGTH("+getDefaultColumnNames(i)+") - 3)), 'YYYY-MM-DD HH24:MI:SS.FFF', 1)";
                         //Klammer zu und as Columnname am ende
@@ -139,6 +189,8 @@ public class mapping_linux {
                     //    break;
                     case "varbinary": result+="CONVERT_TO("+getDefaultColumnNames(i)+" \'UTF8\')";
                         break;
+
+                        //Case wird in Anfrage eingearbeitet da Varchar und Boolean keine Null werte setzten -> Spalte durch iteriert mit Case und setzt alle nulls zu NULL
                     case "boolean":
                         String booleanColumnName = getDefaultColumnNames(i).substring(0,getDefaultColumnNames(i).length()-1)+"1\"";
                         result+= "CAST("+booleanColumnName+" AS BOOLEAN)";
@@ -385,8 +437,8 @@ public class mapping_linux {
         //measures = measures.substring(0,measures.lastIndexOf(",")-1);
         //dimensions = dimensions.substring(0,measures.lastIndexOf(",")-1);
         result+=" DIMENSIONS (";
-        if(dimensions.equals("")){ //Dimension kann nicht leer sein sonst Dremio error
-            dimensions+=measures.substring(0,measures.indexOf(",")); //holt sich den ersten measure Wert als default wert
+        if(dimensions.equals("")){ //Dimension kann nicht leer sein sonst Dremio Error
+            dimensions+=measures.substring(0,measures.indexOf(",")); //holt sich den ersten Measure Wert als default wert -> einsatz falls Dimension leer
         }
         result+=dimensions;
         result=result.substring(0,(result.length()-1)); //letztes komma entfernen
